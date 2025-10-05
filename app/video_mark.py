@@ -2,8 +2,9 @@ import argparse
 import csv
 import os
 import sys
-import time
 import tkinter as tk
+
+from pathlib import Path
 from tkinter import filedialog, messagebox
 
 try:
@@ -11,6 +12,13 @@ try:
 except ImportError:
     print("Missing dependency: python-vlc. Install with `pip install python-vlc`.")
     sys.exit(1)
+
+
+def resource_path(rel_path: str) -> str:
+    """Return absolute path to resource, works in dev and in PyInstaller."""
+    base = getattr(sys, "_MEIPASS", None)  # set by PyInstaller at runtime
+    base_path = Path(base) if base else Path(__file__).parent
+    return str(base_path / rel_path)
 
 
 class VideoMarkerApp:

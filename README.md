@@ -1,5 +1,7 @@
 # video-annotator
 
+## Intro
+
 ![img.png](docs/video-mark-window-v1.png)
 
 Functions
@@ -17,8 +19,9 @@ Notes
 - Undo: Press U to remove the last mark.
 - Auto-save: On quit, it saves to the --out CSV.
 
+# Development Guide
 
-# Setup
+## Setup
 
 1. Install VLC (the desktop app):
 
@@ -31,10 +34,27 @@ Notes
 - python -m venv .venv
 - pip install -r requirements.txt
 
-# Run and Annotate
+## Run and Annotate
 
 ```shell
 python video_mark.py --video /path/to/video.mp4 --out marks.csv
 ```
+
+## Build executable
+~9 MB
+
+Option A (install VLC prior)
+```shell
+pyinstaller -F -n VideoMarker --icon .\docs\video_mark_icon.ico .\app\video_mark.py
+```
+Note: Users must have VLC installed (matching 64-bit vs 32-bit).
+
+
+Option B (VLC bundled in)
+```shell
+pyinstaller -F -n VideoMarker --icon .\docs\video_mark_icon.ico --add-binary "C:\Program Files\VideoLAN\VLC\libvlc.dll;." --add-binary "C:\Program Files\VideoLAN\VLC\libvlccore.dll;." --add-data "C:\Program Files\VideoLAN\VLC\plugins;vlc_plugins" ./app/video_mark.py
+```
+~65 MB
+
 
 
