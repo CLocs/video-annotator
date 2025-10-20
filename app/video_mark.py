@@ -142,7 +142,7 @@ class VideoMarkerApp:
         self.btn_open = tk.Button(toolbar, text="Open Video…", command=self.open_video_dialog)
         self.btn_open.pack(side=tk.LEFT, padx=4)
 
-        self.btn_play = tk.Button(toolbar, text="▶ Play", command=self.toggle_play_pause, width=8, font=("Arial", 10))
+        self.btn_play = tk.Button(toolbar, text="▶ Play (Space)", command=self.toggle_play_pause, width=12, font=("Arial", 10))
         self.btn_play.pack(side=tk.LEFT, padx=4)
 
         self.btn_save = tk.Button(toolbar, text="Save CSV", command=self.save_csv)
@@ -237,7 +237,7 @@ class VideoMarkerApp:
             return
         self.player.play()
         self._is_playing = True
-        self.btn_play.config(text="⏸ Pause")
+        self.btn_play.config(text="⏸ Pause (Space)")
         # Start time display updates
         self.update_time_display()
 
@@ -246,7 +246,7 @@ class VideoMarkerApp:
             return
         self.player.pause()
         self._is_playing = False
-        self.btn_play.config(text="▶ Play")
+        self.btn_play.config(text="▶ Play (Space)")
 
     def toggle_play_pause(self, event=None):
         if self.player is None:
