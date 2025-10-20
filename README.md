@@ -53,7 +53,7 @@ Note: Users must have VLC installed (matching 64-bit vs 32-bit).
 
 Option B (VLC bundled in)
 ```shell
-pyinstaller -F -n VideoMarker --icon .\docs\video_mark_icon.ico --add-binary "C:\Program Files\VideoLAN\VLC\libvlc.dll;." --add-binary "C:\Program Files\VideoLAN\VLC\libvlccore.dll;." --add-data "C:\Program Files\VideoLAN\VLC\plugins;vlc_plugins" ./app/video_mark.py
+pyinstaller -F -n VideoMarker --icon "./docs/video_mark_icon.ico" --add-binary "C:\Program Files\VideoLAN\VLC\libvlc.dll;." --add-binary "C:\Program Files\VideoLAN\VLC\libvlccore.dll;." --add-data "C:\Program Files\VideoLAN\VLC\plugins;vlc_plugins" ./app/video_mark.py
 ```
 ~65 MB
 

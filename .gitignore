@@ -1,4 +1,18 @@
+# build
 build/
 dist/
 VideoMarker.spec
+
+# Virtual environment
 venv/
+.venv/
+
+# IDE files
+misc.xml
+modules.xml
+vcs.xml
+video-annotator.iml
+profiles_settings.xml
+Project_Default.xml
+
+*.pyc
