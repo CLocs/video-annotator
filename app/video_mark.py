@@ -312,6 +312,95 @@ class VideoMarkerApp:
         return "break"
 
     # --- Saving ---
+    def open_folder(self, folder_path):
+        """Open the folder containing the saved file."""
+        try:
+            import subprocess
+            import platform
+            
+            folder = os.path.dirname(folder_path)
+            if not os.path.exists(folder):
+                messagebox.showerror("Error", f"Folder does not exist:\n{folder}")
+                return
+                
+            if platform.system() == "Windows":
+                # Use shell=True for Windows explorer
+                subprocess.run(f'explorer "{folder}"', shell=True, check=False)
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(["open", folder], check=False)
+            else:  # Linux and others
+                subprocess.run(["xdg-open", folder], check=False)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open folder:\n{e}")
+
+    def show_save_dialog(self, file_path, mark_count):
+        """Show custom save dialog with Open Folder button."""
+        dialog = tk.Toplevel(self.master)
+        dialog.title("File Saved")
+        dialog.geometry("500x200")
+        dialog.resizable(False, False)
+        
+        # Center the dialog
+        dialog.transient(self.master)
+        dialog.grab_set()
+        
+        # Main frame
+        main_frame = tk.Frame(dialog, padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Success message
+        success_label = tk.Label(main_frame, text=f"✓ Successfully saved {mark_count} marks!", 
+                               font=("Arial", 12, "bold"), fg="green")
+        success_label.pack(pady=(0, 10))
+        
+        # File path
+        path_label = tk.Label(main_frame, text="Saved to:", font=("Arial", 10))
+        path_label.pack(anchor="w")
+        
+        # File path in a frame with scrollbar for long paths
+        path_frame = tk.Frame(main_frame)
+        path_frame.pack(fill=tk.X, pady=(5, 15))
+        
+        path_text = tk.Text(path_frame, height=3, wrap=tk.WORD, font=("Courier", 9))
+        path_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        path_text.insert(tk.END, file_path)
+        path_text.config(state=tk.DISABLED)
+        
+        scrollbar = tk.Scrollbar(path_frame, orient=tk.VERTICAL, command=path_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        path_text.config(yscrollcommand=scrollbar.set)
+        
+        # Buttons
+        button_frame = tk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        open_folder_btn = tk.Button(button_frame, text="Open Folder", 
+                                  command=lambda: self.open_folder(file_path),
+                                  bg="#4CAF50", fg="white", font=("Arial", 10, "bold"))
+        open_folder_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        close_btn = tk.Button(button_frame, text="Close", 
+                            command=dialog.destroy,
+                            font=("Arial", 10))
+        close_btn.pack(side=tk.RIGHT)
+
+    def save_csv_silent(self):
+        """Save CSV without showing dialog (for auto-save)."""
+        try:
+            # Ensure directory exists
+            outdir = os.path.dirname(self.out_csv) or "."
+            os.makedirs(outdir, exist_ok=True)
+            with open(self.out_csv, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["timestamp_seconds"])
+                for ms in self.marks_ms:
+                    writer.writerow([f"{ms/1000.0:.3f}"])
+            self.lbl_status.config(text=f"Saved: {self.out_csv}")
+            return True
+        except Exception as e:
+            self.lbl_status.config(text=f"Save failed: {e}")
+            return False
+
     def save_csv(self):
         # Save as one column: timestamp_seconds
         try:
@@ -324,23 +413,89 @@ class VideoMarkerApp:
                 for ms in self.marks_ms:
                     writer.writerow([f"{ms/1000.0:.3f}"])
             self.lbl_status.config(text=f"Saved: {self.out_csv}")
-            messagebox.showinfo("Saved", f"Saved {len(self.marks_ms)} marks to:\n{self.out_csv}")
+            self.show_save_dialog(self.out_csv, len(self.marks_ms))
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save CSV:\n{e}")
 
     def on_close(self):
-        # Auto-save on exit (best-effort)
+        # Auto-save on exit and show dialog if there are marks
         if self.marks_ms:
             try:
-                self.save_csv()
-            except Exception:
-                pass
+                # Save silently first
+                if self.save_csv_silent():
+                    # Show dialog after successful save, but don't destroy main window yet
+                    self.show_save_dialog_on_close()
+                    return  # Don't destroy yet, let the dialog handle it
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to auto-save on exit:\n{e}")
+        
+        # If no marks or save failed, proceed with normal close
+        self._cleanup_and_close()
+    
+    def _cleanup_and_close(self):
+        """Clean up resources and close the application."""
         if self.player is not None:
             try:
                 self.player.stop()
             except Exception:
                 pass
         self.master.destroy()
+    
+    def show_save_dialog_on_close(self):
+        """Show save dialog that handles closing the main window."""
+        dialog = tk.Toplevel(self.master)
+        dialog.title("File Saved")
+        dialog.geometry("500x200")
+        dialog.resizable(False, False)
+        
+        # Center the dialog
+        dialog.transient(self.master)
+        dialog.grab_set()
+        
+        # Main frame
+        main_frame = tk.Frame(dialog, padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Success message
+        success_label = tk.Label(main_frame, text=f"✓ Successfully saved {len(self.marks_ms)} marks!", 
+                               font=("Arial", 12, "bold"), fg="green")
+        success_label.pack(pady=(0, 10))
+        
+        # File path
+        path_label = tk.Label(main_frame, text="Saved to:", font=("Arial", 10))
+        path_label.pack(anchor="w")
+        
+        # File path in a frame with scrollbar for long paths
+        path_frame = tk.Frame(main_frame)
+        path_frame.pack(fill=tk.X, pady=(5, 15))
+        
+        path_text = tk.Text(path_frame, height=3, wrap=tk.WORD, font=("Courier", 9))
+        path_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        path_text.insert(tk.END, self.out_csv)
+        path_text.config(state=tk.DISABLED)
+        
+        scrollbar = tk.Scrollbar(path_frame, orient=tk.VERTICAL, command=path_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        path_text.config(yscrollcommand=scrollbar.set)
+        
+        # Buttons
+        button_frame = tk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        open_folder_btn = tk.Button(button_frame, text="Open Folder", 
+                                  command=lambda: self.open_folder(self.out_csv),
+                                  bg="#4CAF50", fg="white", font=("Arial", 10, "bold"))
+        open_folder_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        close_btn = tk.Button(button_frame, text="Close", 
+                            command=lambda: self._close_dialog_and_app(dialog),
+                            font=("Arial", 10))
+        close_btn.pack(side=tk.RIGHT)
+    
+    def _close_dialog_and_app(self, dialog):
+        """Close the dialog and then close the main application."""
+        dialog.destroy()
+        self._cleanup_and_close()
 
 
 def main():
