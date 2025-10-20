@@ -238,7 +238,7 @@ def main():
 
     root = tk.Tk()
     app = VideoMarkerApp(root, video_path=args.video, out_csv=args.out, min_gap_ms=args.mingap)
-    root.geometry("1100x700")
+    root.geometry("1100x800")
     root.mainloop()
 
 
