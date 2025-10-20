@@ -22,8 +22,55 @@ def resource_path(rel_path: str) -> str:
     return str(base_path / rel_path)
 
 
+def get_desktop_path():
+    """Get the Desktop path for the current user across platforms."""
+    try:
+        import os
+        
+        # Windows-specific Desktop paths
+        if sys.platform.startswith('win'):
+            desktop_paths = [
+                os.path.join(os.path.expanduser("~"), "Desktop"),
+                os.path.join(os.path.expanduser("~"), "OneDrive", "Desktop"),  # OneDrive Desktop
+                os.path.join(os.path.expanduser("~"), "OneDrive - *", "Desktop"),  # Corporate OneDrive
+            ]
+            
+            # Also try environment variables
+            if 'USERPROFILE' in os.environ:
+                desktop_paths.insert(0, os.path.join(os.environ['USERPROFILE'], "Desktop"))
+            
+            # Check for OneDrive Desktop in common locations
+            onedrive_paths = [
+                os.path.join(os.path.expanduser("~"), "OneDrive"),
+                os.path.join(os.environ.get('ONEDRIVE', ''), '') if 'ONEDRIVE' in os.environ else None,
+            ]
+            
+            for onedrive in onedrive_paths:
+                if onedrive and os.path.exists(onedrive):
+                    onedrive_desktop = os.path.join(onedrive, "Desktop")
+                    if os.path.exists(onedrive_desktop):
+                        return onedrive_desktop
+        else:
+            # Unix-like systems
+            desktop_paths = [
+                os.path.join(os.path.expanduser("~"), "Desktop"),
+                os.path.join(os.path.expanduser("~"), "desktop"),  # Linux sometimes lowercase
+            ]
+        
+        # Check all desktop paths
+        for path in desktop_paths:
+            if path and os.path.exists(path):
+                return path
+        
+        # Fallback to home directory if Desktop not found
+        return os.path.expanduser("~")
+    except:
+        # Ultimate fallback to current directory
+        return "."
+
+
 def get_default_csv_filename():
-    """Generate default CSV filename with current date and username."""
+    """Generate default CSV filename with current date and username, saved to Desktop."""
     today = datetime.now().strftime("%Y-%m-%d")
     
     # Try to get username from various sources
@@ -37,7 +84,10 @@ def get_default_csv_filename():
         except:
             pass
     
-    return f"{today}_marks_{username}.csv"
+    # Get Desktop path and create full filename
+    desktop = get_desktop_path()
+    filename = f"{today}_marks_{username}.csv"
+    return os.path.join(desktop, filename)
 
 
 class VideoMarkerApp:
