@@ -69,8 +69,8 @@ def get_desktop_path():
         return "."
 
 
-def get_default_csv_filename():
-    """Generate default CSV filename with current date and username, saved to Desktop."""
+def get_default_csv_filename(video_path=None):
+    """Generate default CSV filename with current date, video name, and username, saved to Desktop."""
     today = datetime.now().strftime("%Y-%m-%d")
     
     # Try to get username from various sources
@@ -84,9 +84,21 @@ def get_default_csv_filename():
         except:
             pass
     
+    # Get video name (first 12 characters, sanitized)
+    video_name = ""
+    if video_path and os.path.exists(video_path):
+        video_filename = os.path.basename(video_path)
+        # Remove extension and get first 12 characters
+        video_name = os.path.splitext(video_filename)[0][:12]
+        # Sanitize filename (remove invalid characters)
+        import re
+        video_name = re.sub(r'[<>:"/\\|?*]', '_', video_name)
+        if video_name:
+            video_name = f"_{video_name}"
+    
     # Get Desktop path and create full filename
     desktop = get_desktop_path()
-    filename = f"{today}_marks_{username}.csv"
+    filename = f"{today}{video_name}_marks_{username}.csv"
     return os.path.join(desktop, filename)
 
 
@@ -201,6 +213,11 @@ class VideoMarkerApp:
         self.player.set_media(self.media)
         self.video_path = path
         self.lbl_status.config(text=f"Loaded: {os.path.basename(path)}")
+        
+        # Update CSV filename to include video name
+        self.out_csv = get_default_csv_filename(path)
+        self.lbl_out.config(text=f"Output: {os.path.basename(self.out_csv)}")
+        
         # Reset duration and update time display
         self._total_duration_ms = 0
         self.update_time_display()
@@ -501,9 +518,13 @@ class VideoMarkerApp:
 def main():
     parser = argparse.ArgumentParser(description="Simple video event marker → CSV")
     parser.add_argument("--video", type=str, default=None, help="Path to video file")
-    parser.add_argument("--out", type=str, default=get_default_csv_filename(), help="Output CSV path")
+    parser.add_argument("--out", type=str, default=None, help="Output CSV path")
     parser.add_argument("--mingap", type=int, default=250, help="Debounce between marks (ms)")
     args = parser.parse_args()
+    
+    # Generate default output filename if not provided
+    if args.out is None:
+        args.out = get_default_csv_filename(args.video)
 
     root = tk.Tk()
     app = VideoMarkerApp(root, video_path=args.video, out_csv=args.out, min_gap_ms=args.mingap)
