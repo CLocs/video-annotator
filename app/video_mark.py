@@ -36,6 +36,7 @@ class VideoMarkerApp:
         self.instance = None
         self.media = None
         self._is_playing = False
+        self._total_duration_ms = 0
 
         # --- UI Layout ---
         self._build_ui()
@@ -92,6 +93,13 @@ class VideoMarkerApp:
         # Marks listbox
         right = tk.Frame(self.master)
         right.pack(side=tk.RIGHT, fill=tk.Y, padx=8, pady=6)
+        
+        # Time display above marks
+        time_frame = tk.Frame(right)
+        time_frame.pack(fill=tk.X, pady=(0, 6))
+        self.lbl_time = tk.Label(time_frame, text="00:00:00 / 00:00:00", font=("Courier", 10), fg="blue")
+        self.lbl_time.pack(side=tk.LEFT)
+        
         tk.Label(right, text="Marks (s)").pack()
         self.listbox = tk.Listbox(right, width=18, height=20)
         self.listbox.pack(fill=tk.Y, expand=False)
@@ -124,6 +132,9 @@ class VideoMarkerApp:
         self.player.set_media(self.media)
         self.video_path = path
         self.lbl_status.config(text=f"Loaded: {os.path.basename(path)}")
+        # Reset duration and update time display
+        self._total_duration_ms = 0
+        self.update_time_display()
         # Autoplay
         self.play()
 
@@ -141,6 +152,8 @@ class VideoMarkerApp:
         self.player.play()
         self._is_playing = True
         self.btn_play.config(text="⏸ Pause")
+        # Start time display updates
+        self.update_time_display()
 
     def pause(self):
         if self.player is None:
@@ -164,6 +177,38 @@ class VideoMarkerApp:
         t = self.player.get_time()  # milliseconds from start
         # Sometimes VLC returns -1 when not ready; clamp to 0
         return max(0, t if t is not None else 0)
+    
+    def format_time(self, ms):
+        """Convert milliseconds to HH:MM:SS format"""
+        if ms < 0:
+            return "00:00:00"
+        seconds = int(ms // 1000)
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    
+    def update_time_display(self):
+        """Update the time display with current position and total duration"""
+        if self.player is None:
+            self.lbl_time.config(text="00:00:00 / 00:00:00")
+            return
+        
+        current_ms = self.get_time_ms()
+        current_time = self.format_time(current_ms)
+        
+        # Get total duration if not already set
+        if self._total_duration_ms == 0:
+            duration = self.player.get_length()
+            if duration and duration > 0:
+                self._total_duration_ms = duration
+        
+        total_time = self.format_time(self._total_duration_ms)
+        self.lbl_time.config(text=f"{current_time} / {total_time}")
+        
+        # Schedule next update
+        if self._is_playing:
+            self.master.after(1000, self.update_time_display)  # Update every second
 
     # --- Marking ---
     def ignore_single_click(self):
