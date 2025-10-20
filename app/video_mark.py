@@ -3,6 +3,7 @@ import csv
 import os
 import sys
 import tkinter as tk
+from datetime import datetime
 
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -19,6 +20,24 @@ def resource_path(rel_path: str) -> str:
     base = getattr(sys, "_MEIPASS", None)  # set by PyInstaller at runtime
     base_path = Path(base) if base else Path(__file__).parent
     return str(base_path / rel_path)
+
+
+def get_default_csv_filename():
+    """Generate default CSV filename with current date and username."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    # Try to get username from various sources
+    username = "YOUR_NAME"  # fallback
+    try:
+        import getpass
+        username = getpass.getuser()
+    except (ImportError, OSError):
+        try:
+            username = os.environ.get('USER', os.environ.get('USERNAME', 'YOUR_NAME'))
+        except:
+            pass
+    
+    return f"{today}_marks_{username}.csv"
 
 
 class VideoMarkerApp:
@@ -277,7 +296,7 @@ class VideoMarkerApp:
 def main():
     parser = argparse.ArgumentParser(description="Simple video event marker → CSV")
     parser.add_argument("--video", type=str, default=None, help="Path to video file")
-    parser.add_argument("--out", type=str, default="marks.csv", help="Output CSV path")
+    parser.add_argument("--out", type=str, default=get_default_csv_filename(), help="Output CSV path")
     parser.add_argument("--mingap", type=int, default=250, help="Debounce between marks (ms)")
     args = parser.parse_args()
 
