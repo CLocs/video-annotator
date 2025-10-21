@@ -1,4 +1,4 @@
-# video-annotator
+# Video Marker
 
 ## Intro
 
@@ -19,25 +19,25 @@ Notes
 Save Window
 ![VideoMark: Save Window](docs/video-mark-window-v1.1-save.png)
 
-# Development Guide
+# Developer Guide
 
 ## Setup
 
 1. Install VLC (the desktop app):
 
-- macOS: install via dmg or brew install --cask vlc
-- Windows: install from videolan.org
-- Linux: your package manager (apt install vlc, etc.)
+- macOS: `brew install --cask vlc` or use link below
+- Windows: install from https://www.videolan.org/vlc/
+- Linux: your package manager (apt install vlc)
 
 2. Install Python deps:
 
 - python -m venv .venv
 - pip install -r requirements.txt
 
-## Run and Annotate
+## Run
 
 ```shell
-python video_mark.py --video /path/to/video.mp4 --out marks.csv
+python video_mark.py
 ```
 
 ## Build executable
@@ -45,27 +45,9 @@ python video_mark.py --video /path/to/video.mp4 --out marks.csv
 ### Windows
 
 **Quick build (recommended):**
+Build without VLC bundled (requires VLC on target system)
 ```cmd
-# Build without VLC bundled (requires VLC on target system)
 .\build.bat
-
-# Build with VLC bundled (larger but self-contained)
-.\build.bat bundle-vlc
-
-# Clean build with VLC bundled
-.\build.bat bundle-vlc clean
-```
-
-**Alternative PowerShell script:**
-```powershell
-# Build without VLC bundled (requires VLC on target system)
-.\build_windows_simple.ps1
-
-# Build with VLC bundled (larger but self-contained)
-.\build_windows_simple.ps1 --bundle-vlc
-
-# Clean build with VLC bundled
-.\build_windows_simple.ps1 --bundle-vlc --clean
 ```
 
 **Manual build:**
@@ -115,8 +97,28 @@ pyinstaller -F -n VideoMarker --icon ./docs/video_mark_icon.ico \
 
 **Code signing (for distribution):**
 ```shell
+# macOS
 codesign --force --deep --sign "Developer ID Application: Your Name" dist/VideoMarker
 ```
+
+### Windows Code Signing
+
+**Quick start:**
+For testing (self-signed)
+```cmd
+.\codesign_windows.bat create-cert
+.\codesign_windows.bat sign
+```
+
+See [CODE_SIGNING_GUIDE.md](CODE_SIGNING_GUIDE.md) for detailed instructions including:
+- Self-signed certificates (free, for testing)
+- Commercial certificates (recommended for distribution)
+- Certificate providers and pricing
+- CI/CD integration
+- Troubleshooting
+
+**Requirements:**
+- VLC Media Player installed (download from https://www.videolan.org/vlc/)
 
 
 
