@@ -8,8 +8,49 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
+# CRITICAL: Set up DLL search path BEFORE importing VLC
+# This ensures libvlc.dll and libvlccore.dll can be found on Windows
+if getattr(sys, 'frozen', False) and sys.platform.startswith('win'):
+    # Running as PyInstaller executable on Windows
+    exe_dir = os.path.dirname(sys.executable)
+    
+    # Add executable directory to DLL search path
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetDllDirectoryW(exe_dir)
+        print(f"Set DLL directory to: {exe_dir}")
+    except Exception as e:
+        print(f"Warning: Could not set DLL directory: {e}")
+    
+    # Also add to PATH as a fallback
+    os.environ['PATH'] = exe_dir + os.pathsep + os.environ.get('PATH', '')
+    print(f"Added {exe_dir} to PATH")
+    
+    # Set VLC_PLUGIN_PATH environment variable to help VLC find plugins
+    vlc_plugin_path = os.path.join(exe_dir, "vlc")
+    if os.path.exists(vlc_plugin_path):
+        os.environ['VLC_PLUGIN_PATH'] = vlc_plugin_path
+        print(f"Set VLC_PLUGIN_PATH to: {vlc_plugin_path}")
+
 try:
     import vlc  # python-vlc
+    
+    # If running as frozen executable, try to set the VLC library path explicitly
+    if getattr(sys, 'frozen', False):
+        exe_dir = os.path.dirname(sys.executable)
+        libvlc_path = os.path.join(exe_dir, "libvlc.dll")
+        if os.path.exists(libvlc_path):
+            # Try to load VLC with explicit path
+            try:
+                import ctypes
+                # Pre-load the VLC DLLs to help resolve dependencies
+                ctypes.CDLL(os.path.join(exe_dir, "libvlccore.dll"))
+                ctypes.CDLL(libvlc_path)
+                print(f"Pre-loaded VLC DLLs from: {exe_dir}")
+            except Exception as e:
+                print(f"Warning: Could not pre-load VLC DLLs: {e}")
+                
 except ImportError:
     print("Missing dependency: python-vlc. Install with `pip install python-vlc`.")
     sys.exit(1)
@@ -188,11 +229,100 @@ class VideoMarkerApp:
     # --- Video ---
     def _ensure_vlc(self):
         if self.instance is None:
-            self.instance = vlc.Instance()
+            try:
+                # Configure VLC for PyInstaller executable
+                if getattr(sys, 'frozen', False):
+                    # Running as PyInstaller executable
+                    # For single-file executables, VLC files should be in the same directory as the .exe
+                    # Note: DLL search path is already set up at module import time
+                    exe_dir = os.path.dirname(sys.executable)
+                    vlc_plugin_dir = os.path.join(exe_dir, "vlc")
+                    libvlc_dll = os.path.join(exe_dir, "libvlc.dll")
+                    
+                    vlc_args = []
+                    vlc_found = False
+                    
+                    # Strategy 1: Check for VLC files in executable directory (for single-file build)
+                    if os.path.exists(libvlc_dll) and os.path.exists(vlc_plugin_dir):
+                        vlc_args.append(f'--plugin-path={vlc_plugin_dir}')
+                        print(f"Using VLC from executable directory: {exe_dir}")
+                        print(f"VLC plugins at: {vlc_plugin_dir}")
+                        vlc_found = True
+                    
+                    # Strategy 2: Check for VLC in PyInstaller temp directory (for bundled resources)
+                    if not vlc_found:
+                        vlc_path = resource_path("vlc")
+                        if os.path.exists(vlc_path):
+                            vlc_args.append(f'--plugin-path={vlc_path}')
+                            print(f"Using bundled VLC plugins at: {vlc_path}")
+                            vlc_found = True
+                    
+                    # Strategy 3: Try system VLC installation
+                    if not vlc_found:
+                        vlc_paths = [
+                            "C:\\Program Files\\VideoLAN\\VLC",
+                            "C:\\Program Files (x86)\\VideoLAN\\VLC",
+                            "C:\\VLC"
+                        ]
+                        for vlc_path in vlc_paths:
+                            plugins_dir = os.path.join(vlc_path, "plugins")
+                            if os.path.exists(vlc_path) and os.path.exists(plugins_dir):
+                                vlc_args.append(f'--plugin-path={plugins_dir}')
+                                print(f"Using system VLC at: {vlc_path}")
+                                vlc_found = True
+                                break
+                    
+                    # Try to create VLC instance with the determined arguments
+                    if vlc_args:
+                        self.instance = vlc.Instance(vlc_args)
+                    else:
+                        # Last resort: try without any arguments
+                        print("Warning: VLC files not found in expected locations")
+                        print(f"Executable directory: {exe_dir}")
+                        print(f"Looked for libvlc.dll at: {libvlc_dll}")
+                        print(f"Looked for plugins at: {vlc_plugin_dir}")
+                        print("Attempting VLC initialization without plugin path")
+                        self.instance = vlc.Instance()
+                        
+                else:
+                    # Running as script
+                    self.instance = vlc.Instance()
+                
+                if self.instance is None:
+                    raise Exception("Failed to create VLC instance")
+                    
+            except Exception as e:
+                # More detailed error message for debugging
+                error_msg = f"Failed to initialize VLC player:\n{e}\n\n"
+                if getattr(sys, 'frozen', False):
+                    exe_dir = os.path.dirname(sys.executable)
+                    vlc_plugin_dir = os.path.join(exe_dir, "vlc")
+                    libvlc_dll = os.path.join(exe_dir, "libvlc.dll")
+                    
+                    error_msg += "Please install VLC Media Player:\n\n"
+                    error_msg += "1. Download VLC from: https://www.videolan.org/vlc/\n"
+                    error_msg += "2. Install VLC (use default installation location)\n"
+                    error_msg += "3. Restart VideoMarker\n\n"
+                    error_msg += "Note: VideoMarker requires VLC to play videos.\n"
+                    error_msg += "The bundled VLC files cannot load due to missing system dependencies."
+                else:
+                    error_msg += "Please ensure VLC is installed on your system."
+                
+                messagebox.showerror("VLC Error", error_msg)
+                return False
+                
         if self.player is None:
-            self.player = self.instance.media_player_new()
-            # embed into Tk widget
-            self._embed_player()
+            try:
+                self.player = self.instance.media_player_new()
+                if self.player is None:
+                    raise Exception("Failed to create VLC media player")
+                # embed into Tk widget
+                self._embed_player()
+            except Exception as e:
+                messagebox.showerror("VLC Error", f"Failed to create VLC media player:\n{e}")
+                return False
+        
+        return True
 
     def _embed_player(self):
         self.master.update_idletasks()
@@ -208,21 +338,29 @@ class VideoMarkerApp:
         if not os.path.exists(path):
             messagebox.showerror("Error", f"File not found:\n{path}")
             return
-        self._ensure_vlc()
-        self.media = self.instance.media_new(path)
-        self.player.set_media(self.media)
-        self.video_path = path
-        self.lbl_status.config(text=f"Loaded: {os.path.basename(path)}")
         
-        # Update CSV filename to include video name
-        self.out_csv = get_default_csv_filename(path)
-        self.lbl_out.config(text=f"Output: {os.path.basename(self.out_csv)}")
-        
-        # Reset duration and update time display
-        self._total_duration_ms = 0
-        self.update_time_display()
-        # Autoplay
-        self.play()
+        # Ensure VLC is properly initialized
+        if not self._ensure_vlc():
+            return
+            
+        try:
+            self.media = self.instance.media_new(path)
+            self.player.set_media(self.media)
+            self.video_path = path
+            self.lbl_status.config(text=f"Loaded: {os.path.basename(path)}")
+            
+            # Update CSV filename to include video name
+            self.out_csv = get_default_csv_filename(path)
+            self.lbl_out.config(text=f"Output: {os.path.basename(self.out_csv)}")
+            
+            # Reset duration and update time display
+            self._total_duration_ms = 0
+            self.update_time_display()
+            # Autoplay
+            self.play()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load video:\n{e}")
+            self.lbl_status.config(text="Failed to load video")
 
     def open_video_dialog(self):
         path = filedialog.askopenfilename(

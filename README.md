@@ -43,19 +43,43 @@ python video_mark.py --video /path/to/video.mp4 --out marks.csv
 ## Build executable
 
 ### Windows
-~9 MB
 
-Option A (install VLC prior)
+**Quick build (recommended):**
+```cmd
+# Build without VLC bundled (requires VLC on target system)
+.\build.bat
+
+# Build with VLC bundled (larger but self-contained)
+.\build.bat bundle-vlc
+
+# Clean build with VLC bundled
+.\build.bat bundle-vlc clean
+```
+
+**Alternative PowerShell script:**
+```powershell
+# Build without VLC bundled (requires VLC on target system)
+.\build_windows_simple.ps1
+
+# Build with VLC bundled (larger but self-contained)
+.\build_windows_simple.ps1 --bundle-vlc
+
+# Clean build with VLC bundled
+.\build_windows_simple.ps1 --bundle-vlc --clean
+```
+
+**Manual build:**
+
+Option A (install VLC prior) - ~9 MB
 ```shell
 pyinstaller -F -n VideoMarker --icon .\docs\video_mark_icon.ico .\app\video_mark.py
 ```
 Note: Users must have VLC installed (matching 64-bit vs 32-bit).
 
-Option B (VLC bundled in)
+Option B (VLC bundled in) - ~65 MB
 ```shell
 pyinstaller -F -n VideoMarker --icon "./docs/video_mark_icon.ico" --add-binary "C:\Program Files\VideoLAN\VLC\libvlc.dll;." --add-binary "C:\Program Files\VideoLAN\VLC\libvlccore.dll;." --add-data "C:\Program Files\VideoLAN\VLC\plugins;vlc_plugins" ./app/video_mark.py
 ```
-~65 MB
 
 ### macOS
 ~15 MB
