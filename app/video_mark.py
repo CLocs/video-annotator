@@ -3,6 +3,7 @@ import csv
 import os
 import sys
 import tkinter as tk
+from datetime import datetime
 
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -21,6 +22,86 @@ def resource_path(rel_path: str) -> str:
     return str(base_path / rel_path)
 
 
+def get_desktop_path():
+    """Get the Desktop path for the current user across platforms."""
+    try:
+        import os
+        
+        # Windows-specific Desktop paths
+        if sys.platform.startswith('win'):
+            desktop_paths = [
+                os.path.join(os.path.expanduser("~"), "Desktop"),
+                os.path.join(os.path.expanduser("~"), "OneDrive", "Desktop"),  # OneDrive Desktop
+                os.path.join(os.path.expanduser("~"), "OneDrive - *", "Desktop"),  # Corporate OneDrive
+            ]
+            
+            # Also try environment variables
+            if 'USERPROFILE' in os.environ:
+                desktop_paths.insert(0, os.path.join(os.environ['USERPROFILE'], "Desktop"))
+            
+            # Check for OneDrive Desktop in common locations
+            onedrive_paths = [
+                os.path.join(os.path.expanduser("~"), "OneDrive"),
+                os.path.join(os.environ.get('ONEDRIVE', ''), '') if 'ONEDRIVE' in os.environ else None,
+            ]
+            
+            for onedrive in onedrive_paths:
+                if onedrive and os.path.exists(onedrive):
+                    onedrive_desktop = os.path.join(onedrive, "Desktop")
+                    if os.path.exists(onedrive_desktop):
+                        return onedrive_desktop
+        else:
+            # Unix-like systems
+            desktop_paths = [
+                os.path.join(os.path.expanduser("~"), "Desktop"),
+                os.path.join(os.path.expanduser("~"), "desktop"),  # Linux sometimes lowercase
+            ]
+        
+        # Check all desktop paths
+        for path in desktop_paths:
+            if path and os.path.exists(path):
+                return path
+        
+        # Fallback to home directory if Desktop not found
+        return os.path.expanduser("~")
+    except:
+        # Ultimate fallback to current directory
+        return "."
+
+
+def get_default_csv_filename(video_path=None):
+    """Generate default CSV filename with current date, video name, and username, saved to Desktop."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    # Try to get username from various sources
+    username = "YOUR_NAME"  # fallback
+    try:
+        import getpass
+        username = getpass.getuser()
+    except (ImportError, OSError):
+        try:
+            username = os.environ.get('USER', os.environ.get('USERNAME', 'YOUR_NAME'))
+        except:
+            pass
+    
+    # Get video name (first 12 characters, sanitized)
+    video_name = ""
+    if video_path and os.path.exists(video_path):
+        video_filename = os.path.basename(video_path)
+        # Remove extension and get first 12 characters
+        video_name = os.path.splitext(video_filename)[0][:12]
+        # Sanitize filename (remove invalid characters)
+        import re
+        video_name = re.sub(r'[<>:"/\\|?*]', '_', video_name)
+        if video_name:
+            video_name = f"_{video_name}"
+    
+    # Get Desktop path and create full filename
+    desktop = get_desktop_path()
+    filename = f"{today}{video_name}_marks_{username}.csv"
+    return os.path.join(desktop, filename)
+
+
 class VideoMarkerApp:
     def __init__(self, master, video_path=None, out_csv="marks.csv", min_gap_ms=250):
         self.master = master
@@ -36,6 +117,7 @@ class VideoMarkerApp:
         self.instance = None
         self.media = None
         self._is_playing = False
+        self._total_duration_ms = 0
 
         # --- UI Layout ---
         self._build_ui()
@@ -60,7 +142,7 @@ class VideoMarkerApp:
         self.btn_open = tk.Button(toolbar, text="Open Video…", command=self.open_video_dialog)
         self.btn_open.pack(side=tk.LEFT, padx=4)
 
-        self.btn_play = tk.Button(toolbar, text="Play", command=self.toggle_play_pause)
+        self.btn_play = tk.Button(toolbar, text="▶ Play (Space)", command=self.toggle_play_pause, width=12, font=("Arial", 10))
         self.btn_play.pack(side=tk.LEFT, padx=4)
 
         self.btn_save = tk.Button(toolbar, text="Save CSV", command=self.save_csv)
@@ -92,6 +174,13 @@ class VideoMarkerApp:
         # Marks listbox
         right = tk.Frame(self.master)
         right.pack(side=tk.RIGHT, fill=tk.Y, padx=8, pady=6)
+        
+        # Time display above marks
+        time_frame = tk.Frame(right)
+        time_frame.pack(fill=tk.X, pady=(0, 6))
+        self.lbl_time = tk.Label(time_frame, text="00:00:00 / 00:00:00", font=("Courier", 10), fg="blue")
+        self.lbl_time.pack(side=tk.LEFT)
+        
         tk.Label(right, text="Marks (s)").pack()
         self.listbox = tk.Listbox(right, width=18, height=20)
         self.listbox.pack(fill=tk.Y, expand=False)
@@ -124,6 +213,14 @@ class VideoMarkerApp:
         self.player.set_media(self.media)
         self.video_path = path
         self.lbl_status.config(text=f"Loaded: {os.path.basename(path)}")
+        
+        # Update CSV filename to include video name
+        self.out_csv = get_default_csv_filename(path)
+        self.lbl_out.config(text=f"Output: {os.path.basename(self.out_csv)}")
+        
+        # Reset duration and update time display
+        self._total_duration_ms = 0
+        self.update_time_display()
         # Autoplay
         self.play()
 
@@ -140,14 +237,16 @@ class VideoMarkerApp:
             return
         self.player.play()
         self._is_playing = True
-        self.btn_play.config(text="Pause")
+        self.btn_play.config(text="⏸ Pause (Space)")
+        # Start time display updates
+        self.update_time_display()
 
     def pause(self):
         if self.player is None:
             return
         self.player.pause()
         self._is_playing = False
-        self.btn_play.config(text="Play")
+        self.btn_play.config(text="▶ Play (Space)")
 
     def toggle_play_pause(self, event=None):
         if self.player is None:
@@ -164,6 +263,38 @@ class VideoMarkerApp:
         t = self.player.get_time()  # milliseconds from start
         # Sometimes VLC returns -1 when not ready; clamp to 0
         return max(0, t if t is not None else 0)
+    
+    def format_time(self, ms):
+        """Convert milliseconds to HH:MM:SS format"""
+        if ms < 0:
+            return "00:00:00"
+        seconds = int(ms // 1000)
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    
+    def update_time_display(self):
+        """Update the time display with current position and total duration"""
+        if self.player is None:
+            self.lbl_time.config(text="00:00:00 / 00:00:00")
+            return
+        
+        current_ms = self.get_time_ms()
+        current_time = self.format_time(current_ms)
+        
+        # Get total duration if not already set
+        if self._total_duration_ms == 0:
+            duration = self.player.get_length()
+            if duration and duration > 0:
+                self._total_duration_ms = duration
+        
+        total_time = self.format_time(self._total_duration_ms)
+        self.lbl_time.config(text=f"{current_time} / {total_time}")
+        
+        # Schedule next update
+        if self._is_playing:
+            self.master.after(1000, self.update_time_display)  # Update every second
 
     # --- Marking ---
     def ignore_single_click(self):
@@ -198,6 +329,95 @@ class VideoMarkerApp:
         return "break"
 
     # --- Saving ---
+    def open_folder(self, folder_path):
+        """Open the folder containing the saved file."""
+        try:
+            import subprocess
+            import platform
+            
+            folder = os.path.dirname(folder_path)
+            if not os.path.exists(folder):
+                messagebox.showerror("Error", f"Folder does not exist:\n{folder}")
+                return
+                
+            if platform.system() == "Windows":
+                # Use shell=True for Windows explorer
+                subprocess.run(f'explorer "{folder}"', shell=True, check=False)
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(["open", folder], check=False)
+            else:  # Linux and others
+                subprocess.run(["xdg-open", folder], check=False)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open folder:\n{e}")
+
+    def show_save_dialog(self, file_path, mark_count):
+        """Show custom save dialog with Open Folder button."""
+        dialog = tk.Toplevel(self.master)
+        dialog.title("File Saved")
+        dialog.geometry("500x200")
+        dialog.resizable(False, False)
+        
+        # Center the dialog
+        dialog.transient(self.master)
+        dialog.grab_set()
+        
+        # Main frame
+        main_frame = tk.Frame(dialog, padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Success message
+        success_label = tk.Label(main_frame, text=f"✓ Successfully saved {mark_count} marks!", 
+                               font=("Arial", 12, "bold"), fg="green")
+        success_label.pack(pady=(0, 10))
+        
+        # File path
+        path_label = tk.Label(main_frame, text="Saved to:", font=("Arial", 10))
+        path_label.pack(anchor="w")
+        
+        # File path in a frame with scrollbar for long paths
+        path_frame = tk.Frame(main_frame)
+        path_frame.pack(fill=tk.X, pady=(5, 15))
+        
+        path_text = tk.Text(path_frame, height=3, wrap=tk.WORD, font=("Courier", 9))
+        path_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        path_text.insert(tk.END, file_path)
+        path_text.config(state=tk.DISABLED)
+        
+        scrollbar = tk.Scrollbar(path_frame, orient=tk.VERTICAL, command=path_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        path_text.config(yscrollcommand=scrollbar.set)
+        
+        # Buttons
+        button_frame = tk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        open_folder_btn = tk.Button(button_frame, text="Open Folder", 
+                                  command=lambda: self.open_folder(file_path),
+                                  bg="#4CAF50", fg="white", font=("Arial", 10, "bold"))
+        open_folder_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        close_btn = tk.Button(button_frame, text="Close", 
+                            command=dialog.destroy,
+                            font=("Arial", 10))
+        close_btn.pack(side=tk.RIGHT)
+
+    def save_csv_silent(self):
+        """Save CSV without showing dialog (for auto-save)."""
+        try:
+            # Ensure directory exists
+            outdir = os.path.dirname(self.out_csv) or "."
+            os.makedirs(outdir, exist_ok=True)
+            with open(self.out_csv, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["timestamp_seconds"])
+                for ms in self.marks_ms:
+                    writer.writerow([f"{ms/1000.0:.3f}"])
+            self.lbl_status.config(text=f"Saved: {self.out_csv}")
+            return True
+        except Exception as e:
+            self.lbl_status.config(text=f"Save failed: {e}")
+            return False
+
     def save_csv(self):
         # Save as one column: timestamp_seconds
         try:
@@ -210,35 +430,105 @@ class VideoMarkerApp:
                 for ms in self.marks_ms:
                     writer.writerow([f"{ms/1000.0:.3f}"])
             self.lbl_status.config(text=f"Saved: {self.out_csv}")
-            messagebox.showinfo("Saved", f"Saved {len(self.marks_ms)} marks to:\n{self.out_csv}")
+            self.show_save_dialog(self.out_csv, len(self.marks_ms))
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save CSV:\n{e}")
 
     def on_close(self):
-        # Auto-save on exit (best-effort)
+        # Auto-save on exit and show dialog if there are marks
         if self.marks_ms:
             try:
-                self.save_csv()
-            except Exception:
-                pass
+                # Save silently first
+                if self.save_csv_silent():
+                    # Show dialog after successful save, but don't destroy main window yet
+                    self.show_save_dialog_on_close()
+                    return  # Don't destroy yet, let the dialog handle it
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to auto-save on exit:\n{e}")
+        
+        # If no marks or save failed, proceed with normal close
+        self._cleanup_and_close()
+    
+    def _cleanup_and_close(self):
+        """Clean up resources and close the application."""
         if self.player is not None:
             try:
                 self.player.stop()
             except Exception:
                 pass
         self.master.destroy()
+    
+    def show_save_dialog_on_close(self):
+        """Show save dialog that handles closing the main window."""
+        dialog = tk.Toplevel(self.master)
+        dialog.title("File Saved")
+        dialog.geometry("500x200")
+        dialog.resizable(False, False)
+        
+        # Center the dialog
+        dialog.transient(self.master)
+        dialog.grab_set()
+        
+        # Main frame
+        main_frame = tk.Frame(dialog, padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Success message
+        success_label = tk.Label(main_frame, text=f"✓ Successfully saved {len(self.marks_ms)} marks!", 
+                               font=("Arial", 12, "bold"), fg="green")
+        success_label.pack(pady=(0, 10))
+        
+        # File path
+        path_label = tk.Label(main_frame, text="Saved to:", font=("Arial", 10))
+        path_label.pack(anchor="w")
+        
+        # File path in a frame with scrollbar for long paths
+        path_frame = tk.Frame(main_frame)
+        path_frame.pack(fill=tk.X, pady=(5, 15))
+        
+        path_text = tk.Text(path_frame, height=3, wrap=tk.WORD, font=("Courier", 9))
+        path_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        path_text.insert(tk.END, self.out_csv)
+        path_text.config(state=tk.DISABLED)
+        
+        scrollbar = tk.Scrollbar(path_frame, orient=tk.VERTICAL, command=path_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        path_text.config(yscrollcommand=scrollbar.set)
+        
+        # Buttons
+        button_frame = tk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        open_folder_btn = tk.Button(button_frame, text="Open Folder", 
+                                  command=lambda: self.open_folder(self.out_csv),
+                                  bg="#4CAF50", fg="white", font=("Arial", 10, "bold"))
+        open_folder_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        close_btn = tk.Button(button_frame, text="Close", 
+                            command=lambda: self._close_dialog_and_app(dialog),
+                            font=("Arial", 10))
+        close_btn.pack(side=tk.RIGHT)
+    
+    def _close_dialog_and_app(self, dialog):
+        """Close the dialog and then close the main application."""
+        dialog.destroy()
+        self._cleanup_and_close()
 
 
 def main():
     parser = argparse.ArgumentParser(description="Simple video event marker → CSV")
     parser.add_argument("--video", type=str, default=None, help="Path to video file")
-    parser.add_argument("--out", type=str, default="marks.csv", help="Output CSV path")
+    parser.add_argument("--out", type=str, default=None, help="Output CSV path")
     parser.add_argument("--mingap", type=int, default=250, help="Debounce between marks (ms)")
     args = parser.parse_args()
+    
+    # Generate default output filename if not provided
+    if args.out is None:
+        args.out = get_default_csv_filename(args.video)
 
     root = tk.Tk()
     app = VideoMarkerApp(root, video_path=args.video, out_csv=args.out, min_gap_ms=args.mingap)
-    root.geometry("1100x700")
+    root.geometry("1100x800")
     root.mainloop()
 
 
