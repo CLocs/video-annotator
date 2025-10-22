@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Build script for VideoMarker on macOS
-# Usage: ./build_macos.sh [--bundle-vlc]
+# Build script for VideoMarker on macOS (PySide6 version)
+# Usage: ./build_macos.sh
 
 set -e
 
@@ -11,7 +11,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}Building VideoMarker for macOS...${NC}"
+echo -e "${GREEN}Building VideoMarker for macOS (PySide6)...${NC}"
 
 # Check if PyInstaller is installed
 if ! command -v pyinstaller &> /dev/null; then
@@ -29,56 +29,22 @@ fi
 
 # Clean previous builds
 echo "Cleaning previous builds..."
-rm -rf build/ dist/ *.spec
+rm -rf build/ dist/
 
-if [ "$1" = "--bundle-vlc" ]; then
-    echo -e "${GREEN}Building with VLC bundled...${NC}"
-    
-    # Try to find VLC installation
-    VLC_PATHS=(
-        "/Applications/VLC.app/Contents/MacOS/lib"
-        "/usr/local/lib"  # Homebrew
-        "/opt/homebrew/lib"  # Apple Silicon Homebrew
-    )
-    
-    VLC_PATH=""
-    for path in "${VLC_PATHS[@]}"; do
-        if [ -d "$path" ] && [ -f "$path/libvlc.dylib" ]; then
-            VLC_PATH="$path"
-            break
-        fi
-    done
-    
-    if [ -z "$VLC_PATH" ]; then
-        echo -e "${RED}Error: VLC not found. Please install VLC first.${NC}"
-        echo "Try: brew install --cask vlc"
-        exit 1
-    fi
-    
-    echo "Found VLC at: $VLC_PATH"
-    
-    # Build with VLC bundled
-    pyinstaller -F -n VideoMarker $ICON_ARG \
-        --add-binary "$VLC_PATH/libvlc.dylib:." \
-        --add-binary "$VLC_PATH/libvlccore.dylib:." \
-        --add-data "$VLC_PATH/../plugins:vlc_plugins" \
-        ./app/video_mark.py
-    
-    echo -e "${GREEN}Build complete! Executable size: ~80MB${NC}"
-else
-    echo -e "${GREEN}Building without VLC (requires VLC to be installed on target system)...${NC}"
-    
-    # Build without VLC bundled
-    pyinstaller -F -n VideoMarker $ICON_ARG ./app/video_mark.py
-    
-    echo -e "${GREEN}Build complete! Executable size: ~15MB${NC}"
-    echo -e "${YELLOW}Note: Users must have VLC installed on their system${NC}"
-fi
+echo -e "${GREEN}Building with PySide6 (includes audio/video support)...${NC}"
 
+# Build using spec file (works on macOS too)
+pyinstaller VideoMarker.spec
+
+# On macOS, PyInstaller creates .app bundles with --onefile
+# If you want a .app bundle instead, use --windowed
+echo -e "${GREEN}Build complete!${NC}"
 echo -e "${GREEN}Executable created at: dist/VideoMarker${NC}"
+echo -e "${YELLOW}Note: PySide6 multimedia codecs are bundled${NC}"
 
 # Optional: Code signing
 if command -v codesign &> /dev/null; then
+    echo ""
     echo -e "${YELLOW}To sign the executable for distribution, run:${NC}"
     echo "codesign --force --deep --sign \"Developer ID Application: Your Name\" dist/VideoMarker"
 fi
