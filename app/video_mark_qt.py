@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QPushButton, QVBoxLayout, QHBoxLayout,
     QFileDialog, QLabel, QListWidget, QMessageBox, QMainWindow
 )
-from PySide6.QtMultimedia import QMediaPlayer
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
 
 class VideoMarkerQt(QMainWindow):
@@ -19,6 +19,8 @@ class VideoMarkerQt(QMainWindow):
 
         # --- Player ---
         self.player = QMediaPlayer(self)
+        self.audio_output = QAudioOutput(self)
+        self.player.setAudioOutput(self.audio_output)
         self.video_widget = QVideoWidget(self)
         self.player.setVideoOutput(self.video_widget)
 
